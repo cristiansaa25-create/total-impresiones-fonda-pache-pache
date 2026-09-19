@@ -35,7 +35,7 @@ input{width:100%;font-size:18px;padding:13px;border:1px solid #cbd5e1;border-rad
       <div id="count" class="count">0 boletas</div>
     </div>
     <div id="status" class="status">Conectando con Firebase…</div>
-    <div class="note">El total aumenta cuando cualquier teléfono pulsa “Imprimir térmica Bluetooth” en la caja. Si se cancela después dentro de RawBT, la aplicación no puede detectarlo.</div>
+    <div id="sourceNote" class="note">El total aumenta cuando cualquier teléfono pulsa “Imprimir térmica Bluetooth” en la caja. Si se cancela después dentro de RawBT, la aplicación no puede detectarlo.</div>
   </section>
 </main>
 <script src="https://www.gstatic.com/firebasejs/12.19.0/firebase-app-compat.js"></script>
@@ -45,20 +45,27 @@ const firebaseConfig={apiKey:"AIzaSyBT8wjvd63jZYyPoCWnPnmzonkf1eWDiBQ",authDomai
 firebase.initializeApp(firebaseConfig);
 const db=firebase.firestore();
 const ventas=db.collection("Ventas");
-let prints=[];
+let records=[];
 function todayKey(){const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")}
 function money(n){return "$"+Math.round(Number(n)||0).toLocaleString("es-CL")}
 function render(){
   const selected=document.getElementById("fecha").value;
-  const rows=prints.filter(x=>x.date===selected);
+  const tracked=records.filter(x=>x.date===selected && (x.recordType==="device_print" || x.recordType==="print_backup"));
+  const historical=records.filter(x=>x.date===selected && !x.recordType);
+  const useHistorical=selected<"2026-09-19" && tracked.length===0;
+  const rows=useHistorical ? historical : tracked;
   const sum=rows.reduce((a,x)=>a+Number(x.total||0),0);
   document.getElementById("total").textContent=money(sum);
   document.getElementById("count").textContent=rows.length+" boleta"+(rows.length===1?"":"s");
+  document.getElementById("sourceNote").textContent=useHistorical
+    ? "Total histórico reconstruido desde las ventas que todavía existen en Firebase. No permite confirmar si cada boleta fue impresa."
+    : "El total aumenta cuando cualquier teléfono pulsa “Imprimir térmica Bluetooth” en la caja. Si se cancela después dentro de RawBT, la aplicación no puede detectarlo.";
 }
 document.getElementById("fecha").value=todayKey();
 document.getElementById("fecha").addEventListener("change",render);
 ventas.onSnapshot(snapshot=>{
-  prints=snapshot.docs.map(doc=>({id:doc.id,...doc.data()})).filter(x=>x.recordType==="device_print");
+  records=snapshot.docs.map(doc=>({id:doc.id,...doc.data()}));
+  const prints=records.filter(x=>x.recordType==="device_print" || x.recordType==="print_backup");
   const status=document.getElementById("status");
   status.textContent="✓ Conectado · "+prints.length+" impresiones sincronizadas";
   status.className="status ok";
